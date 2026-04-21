@@ -134,7 +134,7 @@ function start(appConfig) {
   const tz            = config.schedule?.timezone      || 'America/New_York';
 
   if (cron.validate(crawlCron)) {
-    crawlJob = cron.schedule(crawlCron, runCrawlAndPipeline, { scheduled: true, timezone: tz });
+    crawlJob = cron.schedule(crawlCron, () => runCrawlAndPipeline(), { scheduled: true, timezone: tz });
     console.log(`[scheduler] Crawl:     "${crawlCron}" (${tz})`);
   } else {
     console.error(`[scheduler] Invalid crawl cron: "${crawlCron}"`);
