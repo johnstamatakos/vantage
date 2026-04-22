@@ -234,10 +234,14 @@ app.get('/api/analytics', requireLogin, (req, res) => {
 
 app.get('/api/articles', requireLogin, (req, res) => {
   const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+  const TWO_WEEKS  = 14 * 24 * 60 * 60 * 1000;
   const articles = db.getAllArticles().map(a => {
     const evalData = a.eval_data ? JSON.parse(a.eval_data) : null;
-    const expires_at = (a.status === 'skipped' && !a.starred)
-      ? new Date(new Date(a.fetched_at).getTime() + THREE_DAYS).toISOString()
+    const expires_at =
+      (a.status === 'skipped' && !a.starred)
+        ? new Date(new Date(a.fetched_at).getTime() + THREE_DAYS).toISOString()
+      : (a.status === 'drafted' && !a.starred && a.draft_status !== 'approved' && a.draft_status !== 'posted')
+        ? new Date(new Date(a.fetched_at).getTime() + TWO_WEEKS).toISOString()
       : null;
     const queued_for_deletion = !a.starred
       && a.status === 'drafted'

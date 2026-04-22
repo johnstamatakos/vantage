@@ -249,8 +249,9 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
     setDrafting(id)
     try {
       const result = await api(`/api/articles/${id}/draft`, 'POST')
+      const draftExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       setArticles(prev => prev.map(a => a.id === id
-        ? { ...a, status: 'drafted', draft_status: 'pending_review', eval_score: result.score, expires_at: null, queued_for_deletion: false }
+        ? { ...a, status: 'drafted', draft_status: 'pending_review', eval_score: result.score, expires_at: draftExpiry, queued_for_deletion: false }
         : a
       ))
       updateBadges()

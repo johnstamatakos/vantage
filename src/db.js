@@ -114,13 +114,13 @@ function toggleArticleStar(id) {
 
 function pruneArticles() {
   return db.transaction(() => {
-    // Pending articles older than 5 days — stale, will never be evaluated
+    // Pending articles older than 3 days — stale, will never be evaluated
     const pendingResult = db.prepare(`
       DELETE FROM articles
       WHERE status = 'pending' AND starred = 0 AND fetched_at < datetime('now', '-3 days')
     `).run();
 
-    // Skipped articles older than 5 days (not starred)
+    // Skipped articles older than 3 days (not starred)
     const skippedResult = db.prepare(`
       DELETE FROM articles
       WHERE status = 'skipped' AND starred = 0 AND fetched_at < datetime('now', '-3 days')
@@ -140,7 +140,35 @@ function pruneArticles() {
       db.prepare(`DELETE FROM articles WHERE id = ?`).run(id);
     }
 
-    return { pending: pendingResult.changes, skipped: skippedResult.changes, rejected: toDelete.length };
+    // Drafted articles older than 14 days (not starred, no approved/posted drafts)
+    const expiredDrafted = db.prepare(`
+      SELECT a.id FROM articles a
+      WHERE a.starred = 0
+        AND a.status = 'drafted'
+        AND a.fetched_at < datetime('now', '-14 days')
+        AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.article_id = a.id AND d.status IN ('approved', 'posted'))
+    `).all();
+
+    for (const { id } of expiredDrafted) {
+      db.prepare(`DELETE FROM drafts  WHERE article_id = ?`).run(id);
+      db.prepare(`DELETE FROM articles WHERE id = ?`).run(id);
+    }
+
+    // Stale pending_review drafts older than 14 days (not on starred articles)
+    const staleDraftsResult = db.prepare(`
+      DELETE FROM drafts
+      WHERE status = 'pending_review'
+        AND created_at < datetime('now', '-14 days')
+        AND (article_id IS NULL OR article_id NOT IN (SELECT id FROM articles WHERE starred = 1))
+    `).run();
+
+    return {
+      pending:        pendingResult.changes,
+      skipped:        skippedResult.changes,
+      rejected:       toDelete.length,
+      expiredDrafted: expiredDrafted.length,
+      staleDrafts:    staleDraftsResult.changes,
+    };
   })();
 }
 
