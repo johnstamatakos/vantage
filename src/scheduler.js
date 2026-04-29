@@ -95,8 +95,8 @@ async function runCrawlAndPipeline(onProgress) {
   console.log('[scheduler] Crawl + pipeline starting...');
   try {
     const pruned = pruneArticles();
-    if (pruned.pending || pruned.skipped || pruned.rejected) {
-      console.log(`[scheduler] Pruned ${pruned.pending} stale pending + ${pruned.skipped} expired + ${pruned.rejected} rejected articles`);
+    if (pruned.pending || pruned.scored || pruned.filtered || pruned.rejected) {
+      console.log(`[scheduler] Pruned ${pruned.pending} pending + ${pruned.scored} scored + ${pruned.filtered} filtered + ${pruned.rejected} rejected articles`);
     }
 
     onProgress?.({ msg: 'Checking source health...' });
@@ -157,15 +157,15 @@ function start(appConfig) {
   // Nightly prune — runs regardless of crawl schedule
   pruneJob = cron.schedule('0 3 * * *', () => {
     const pruned = pruneArticles();
-    if (pruned.pending || pruned.skipped || pruned.rejected) {
-      console.log(`[scheduler] Nightly prune: ${pruned.pending} pending + ${pruned.skipped} skipped + ${pruned.rejected} rejected removed`);
+    if (pruned.pending || pruned.scored || pruned.filtered || pruned.rejected) {
+      console.log(`[scheduler] Nightly prune: ${pruned.pending} pending + ${pruned.scored} scored + ${pruned.filtered} filtered + ${pruned.rejected} rejected removed`);
     }
   }, { scheduled: true, timezone: tz });
 
   // Run once at startup to clean up immediately
   const pruned = pruneArticles();
-  if (pruned.pending || pruned.skipped || pruned.rejected) {
-    console.log(`[scheduler] Startup prune: ${pruned.pending} pending + ${pruned.skipped} skipped + ${pruned.rejected} rejected removed`);
+  if (pruned.pending || pruned.scored || pruned.filtered || pruned.rejected) {
+    console.log(`[scheduler] Startup prune: ${pruned.pending} pending + ${pruned.scored} scored + ${pruned.filtered} filtered + ${pruned.rejected} rejected removed`);
   }
 }
 

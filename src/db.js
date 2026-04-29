@@ -110,6 +110,7 @@ function getAllArticles() {
     SELECT a.*,
       (SELECT d.status FROM drafts d WHERE d.article_id = a.id ORDER BY d.created_at DESC LIMIT 1) as draft_status
     FROM articles a
+    WHERE a.status != 'filtered'
     ORDER BY a.fetched_at DESC
   `).all();
 }
@@ -127,17 +128,20 @@ function pruneArticles() {
       WHERE status = 'pending' AND starred = 0 AND fetched_at < datetime('now', '-3 days')
     `).run();
 
-    // Skipped articles older than 3 days (not starred)
-    const skippedResult = db.prepare(`
+    // Filtered articles older than 5 days (pass:false, too similar, eval failed)
+    const filteredResult = db.prepare(`
       DELETE FROM articles
-      WHERE status = 'skipped' AND starred = 0 AND fetched_at < datetime('now', '-3 days')
+      WHERE status = 'filtered' AND starred = 0 AND fetched_at < datetime('now', '-5 days')
     `).run();
 
-    // Evaluated articles older than 30 days that were never drafted (not starred)
-    const evaluatedResult = db.prepare(`
+    // Scored articles older than 5 days that were never drafted (not starred)
+    const scoredResult = db.prepare(`
       DELETE FROM articles
-      WHERE status = 'evaluated' AND starred = 0 AND fetched_at < datetime('now', '-30 days')
+      WHERE status = 'scored' AND starred = 0 AND fetched_at < datetime('now', '-5 days')
     `).run();
+
+    // Legacy cleanup — old statuses from before the rename
+    db.prepare(`DELETE FROM articles WHERE status IN ('evaluated','skipped') AND starred = 0 AND fetched_at < datetime('now', '-5 days')`).run();
 
     // Articles whose latest draft is rejected, with no active draft, not starred
     const toDelete = db.prepare(`
@@ -177,8 +181,8 @@ function pruneArticles() {
 
     return {
       pending:        pendingResult.changes,
-      skipped:        skippedResult.changes,
-      evaluated:      evaluatedResult.changes,
+      filtered:       filteredResult.changes,
+      scored:         scoredResult.changes,
       rejected:       toDelete.length,
       expiredDrafted: expiredDrafted.length,
       staleDrafts:    staleDraftsResult.changes,

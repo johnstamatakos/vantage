@@ -4,17 +4,15 @@ import { api } from '../utils/api'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DRAFT_STATUS_LABEL = {
-  pending_review: { label: 'awaiting review', color: 'var(--accent)' },
-  approved:       { label: 'approved',         color: 'var(--green)' },
-  posted:         { label: 'posted',            color: 'var(--green)' },
-  rejected:       { label: 'rejected',          color: 'var(--red)' },
+  pending_review: { label: 'draft saved', color: 'var(--accent)' },
+  approved:       { label: 'queued',      color: 'var(--green)' },
+  posted:         { label: 'published',   color: 'var(--green)' },
+  rejected:       { label: 'rejected',    color: 'var(--red)' },
 }
 
 const ARTICLE_STATUS_COLOR = {
-  pending:   'var(--muted)',
-  evaluated: 'var(--yellow)',
-  drafted:   'var(--accent)',
-  skipped:   'var(--muted)',
+  pending: 'var(--muted)',
+  scored:  null,
 }
 
 const BREAKDOWN_ROWS = [
@@ -34,12 +32,9 @@ const COLUMNS = [
 
 const STATUS_OPTIONS = [
   { value: '',               label: 'All' },
-  { value: 'pending',        label: 'Pending scoring' },
-  { value: 'evaluated',      label: 'Scored' },
-  { value: 'skipped',        label: 'Low score' },
-  { value: 'drafted',        label: 'Draft saved' },
-  { value: 'pending_review', label: 'Draft — awaiting queue' },
-  { value: 'approved',       label: 'Draft — queued' },
+  { value: 'scored',         label: 'Scored' },
+  { value: 'pending_review', label: 'Draft saved' },
+  { value: 'approved',       label: 'Queued' },
   { value: 'posted',         label: 'Published' },
 ]
 
@@ -48,12 +43,18 @@ const FILTER_DEFAULTS = { source: '', scoreMin: 0, scoreMax: 10, since: '', stat
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ScoreBreakdown({ breakdown }) {
+  const isHighScore = breakdown.overallScore != null && breakdown.overallScore > 7
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 12px', width: 220,
+      borderRadius: 8, padding: '10px 12px', width: 240,
       boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
     }}>
+      {isHighScore && breakdown.primaryConnection && (
+        <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--green)', lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          {breakdown.primaryConnection}
+        </div>
+      )}
       {BREAKDOWN_ROWS.map(({ key, label, weight }) => (
         breakdown[key] != null && (
           <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 5, fontSize: 12 }}>
@@ -228,7 +229,7 @@ function DraftButton({ article, onDraft }) {
 
 export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
   const [articles, setArticles] = useState(null)
-  const [sortKey, setSortKey]   = useState('fetched_at')
+  const [sortKey, setSortKey]   = useState('eval_score')
   const [sortDir, setSortDir]   = useState('desc')
   const [filters, setFilters]   = useState(FILTER_DEFAULTS)
 
@@ -399,8 +400,8 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
             <tbody>
               {sorted.map(a => {
                 const draftMeta   = a.draft_status ? DRAFT_STATUS_LABEL[a.draft_status] : null
-                const statusLabel = draftMeta ? draftMeta.label : a.status
-                const statusColor = draftMeta ? draftMeta.color : ARTICLE_STATUS_COLOR[a.status] || 'var(--muted)'
+                const statusLabel = draftMeta ? draftMeta.label : (a.status === 'scored' ? null : a.status)
+                const statusColor = draftMeta ? draftMeta.color : (ARTICLE_STATUS_COLOR[a.status] || 'var(--muted)')
                 return (
                   <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 0 10px 12px', verticalAlign: 'middle' }}>
@@ -415,7 +416,7 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
                         {a.title}
                       </a>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                        <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>
+                        {statusLabel && <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>}
                         <ExpirationPill article={a} />
                         {a.status !== 'drafted' && onDraft && (
                           <button onClick={() => onDraft(a)}
@@ -464,8 +465,8 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
       <div className="feed-cards">
         {sorted.map(a => {
           const draftMeta   = a.draft_status ? DRAFT_STATUS_LABEL[a.draft_status] : null
-          const statusLabel = draftMeta ? draftMeta.label : a.status
-          const statusColor = draftMeta ? draftMeta.color : ARTICLE_STATUS_COLOR[a.status] || 'var(--muted)'
+          const statusLabel = draftMeta ? draftMeta.label : (a.status === 'scored' ? null : a.status)
+          const statusColor = draftMeta ? draftMeta.color : (ARTICLE_STATUS_COLOR[a.status] || 'var(--muted)')
           return (
             <div key={a.id} className="article-card">
               {/* Title row */}
@@ -487,7 +488,7 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
                 {a.source && <span>·</span>}
                 <span>{new Date(a.fetched_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                 <span>·</span>
-                <span style={{ color: statusColor }}>{statusLabel}</span>
+                {statusLabel && <span style={{ color: statusColor }}>{statusLabel}</span>}
               </div>
 
               {/* Score (inline, expandable) */}

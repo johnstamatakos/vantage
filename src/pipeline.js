@@ -366,7 +366,6 @@ async function analyzeArticleUrl(url) {
 // ─── Evaluation loop (scores pending articles, no drafting) ──────────────────
 
 async function runEvaluation(config, onProgress) {
-  const minScore    = config.pipeline?.minRelevanceScore   || 7;
   const articleLimit = config.pipeline?.articlesPerCrawlRun || 50;
   console.log('[pipeline] Evaluation starting...');
 
@@ -377,7 +376,7 @@ async function runEvaluation(config, onProgress) {
   const articles = getPendingArticles(articleLimit);
   console.log(`[pipeline] ${articles.length} pending articles to evaluate`);
   let evaluated = 0;
-  let skipped   = 0;
+  let filtered  = 0;
 
   for (const article of articles) {
     console.log(`[pipeline] Evaluating: "${article.title}"`);
@@ -385,34 +384,33 @@ async function runEvaluation(config, onProgress) {
     const evalData = await evaluate(article, rejectionContext, recencyContext);
 
     if (!evalData) {
-      updateArticleEval(article.id, 0, {}, 'skipped');
-      skipped++;
+      updateArticleEval(article.id, 0, {}, 'filtered');
+      filtered++;
       continue;
     }
 
     if (evalData.tooSimilarToRecent) {
-      console.log(`[pipeline] Skip "${article.title}" — too similar to recent post`);
-      updateArticleEval(article.id, evalData.overallScore, evalData, 'skipped');
-      skipped++;
+      console.log(`[pipeline] Filter "${article.title}" — too similar to recent post`);
+      updateArticleEval(article.id, evalData.overallScore, evalData, 'filtered');
+      filtered++;
       continue;
     }
 
-    const relevanceScore = evalData.relevanceScore ?? evalData.overallScore;
-    if (!evalData.pass || relevanceScore < minScore) {
-      console.log(`[pipeline] Skip "${article.title}" (relevance: ${relevanceScore}, overall: ${evalData.overallScore}): ${evalData.skipReason || 'below threshold'}`);
-      updateArticleEval(article.id, evalData.overallScore, evalData, 'skipped');
-      skipped++;
+    if (!evalData.pass) {
+      console.log(`[pipeline] Filter "${article.title}": ${evalData.skipReason || 'did not pass'}`);
+      updateArticleEval(article.id, evalData.overallScore, evalData, 'filtered');
+      filtered++;
       continue;
     }
 
-    updateArticleEval(article.id, evalData.overallScore, evalData, 'evaluated');
+    updateArticleEval(article.id, evalData.overallScore, evalData, 'scored');
     evaluated++;
     console.log(`[pipeline] Scored "${article.title}": ${evalData.overallScore}/10`);
     await new Promise(r => setTimeout(r, 500));
   }
 
-  console.log(`[pipeline] Done. evaluated=${evaluated} skipped=${skipped}`);
-  return { evaluated, skipped };
+  console.log(`[pipeline] Done. evaluated=${evaluated} filtered=${filtered}`);
+  return { evaluated, filtered };
 }
 
 function reloadSkills() {
