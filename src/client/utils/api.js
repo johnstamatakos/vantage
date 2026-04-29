@@ -57,3 +57,16 @@ export function fmtNum(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(n)
 }
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+export function parseCron(cron) {
+  if (!cron) return '—'
+  const [min, hour, , , weekday] = cron.split(' ')
+  const h = parseInt(hour), m = parseInt(min)
+  const time = `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+  const days = weekday === '*'
+    ? 'every day'
+    : weekday.split(',').map(d => DAYS[parseInt(d)]).join(', ')
+  return `${days} at ${time}`
+}

@@ -59,8 +59,8 @@ ${rejectionContext}
   const recencyBlock = recencyContext
     ? `---
 
-RECENT POSTS (do not repeat these themes):
-The author has recently published posts on these articles. If the current article
+RECENTLY ENGAGED ARTICLES (do not repeat these themes):
+The author has recently published content on these articles. If the current article
 would produce substantially the same theme, angle, or core argument as one of
 these, set tooSimilarToRecent to true and explain briefly in similarityNote.
 Minor topical overlap is fine — near-identical angles are not.
@@ -72,25 +72,98 @@ ${recencyContext}
 `
     : '';
 
-  const system = `You are an expert content strategist evaluating articles for LinkedIn post potential.
+  // Extract optional scoring notes block from the skill file (everything after "## Scoring notes")
+  const scoringNotesMatch = skills.contentEval.match(/^## Scoring notes[\s\S]*/m);
+  const scoringNotes = scoringNotesMatch
+    ? scoringNotesMatch[0].replace(/^## Scoring notes.*\n/, '').trim()
+    : null;
 
-${skills.contentEval}
+  const scoringNotesBlock = scoringNotes
+    ? `ADDITIONAL SCORING CONTEXT (from author's preferences):\n${scoringNotes}\n\n`
+    : '';
+
+  const system = `You are a content curator evaluating articles for a professional's feed.
+
+## Scoring Dimensions
+
+Score each dimension 1–10.
+
+### Relevance (weight: 50%)
+
+${skills.contentEval.split('## Scoring notes')[0].trim()}
 
 ---
 
-For job context, use this reference:
+For professional background and job context:
 
 ${skills.jobContext}
 
 ---
 
-These are John's actual points of view. Use them to assess opinion-triggered relevance:
+For points of view — use these to assess opinion-triggered relevance.
+An article that CHALLENGES one of these views scores equally to one that REINFORCES it.
+Both prompt genuine engagement. Do not penalise disagreement.
 
 ${skills.pointsOfView}
 
-${rejectionBlock}${recencyBlock}Return ONLY a valid JSON object. No markdown, no explanation, no preamble.`;
+---
 
-  const user = `Evaluate this article for LinkedIn post potential.
+### Timeliness (weight: 20%)
+- Published within the last week: 9–10
+- Within the last month: 6–8
+- Within the last quarter: 3–5
+- Older: 1–2
+
+### Specificity (weight: 15%)
+Does the article contain concrete findings, data, techniques, or specific examples?
+Vague think-pieces, listicles, and generic hot-takes score low. Technical depth,
+empirical findings, specific frameworks, and hard-won lessons score high.
+
+### Feed Value (weight: 15%)
+Would this article be worth the author's time even without writing a post about it?
+Is there a genuine insight, a surprising finding, a useful framework, or a perspective
+worth engaging with? Purely promotional content, complete paywalls, or content only
+meaningful to a niche academic audience score low.
+
+## Scoring Formula
+overallScore = (relevance × 0.5) + (timeliness × 0.2) + (specificity × 0.15) + (feedValue × 0.15)
+Round to one decimal place.
+
+## Principles
+- An article that challenges the author's views ranks the same as one that reinforces them.
+- Score what the article actually contains, not what the headline promises.
+- Set pass: false only when the article has genuinely no connection to the author's
+  work, interests, or points of view — not merely because it disagrees with them.
+
+${scoringNotesBlock}${rejectionBlock}${recencyBlock}## Output Format
+
+Return ONLY a valid JSON object. No markdown fences, no explanation, no preamble.
+
+{
+  "relevanceScore": 8,
+  "timelinessScore": 9,
+  "specificityScore": 7,
+  "feedValueScore": 8,
+  "overallScore": 8.0,
+  "primaryConnection": "Brief description of which work area, topic, or POV this connects to",
+  "keyInsight": "One sentence: the core takeaway that makes this article worth reading.",
+  "applicationHook": "One sentence: how this connects to the author's specific work or experience.",
+  "pass": true,
+  "skipReason": null,
+  "tooSimilarToRecent": false,
+  "similarityNote": null
+}
+
+Set pass: false only for clear disqualifiers — entirely paywalled with no substantive preview,
+pure press release or promotional content with no analysis, or so vague from the excerpt that
+relevance cannot be assessed at all. Do not set pass: false simply because you disagree with
+the article or because it scores low. The score threshold handles low-relevance filtering.
+pass: false is for articles that should not be in the feed regardless of score.
+
+If pass is false, populate skipReason with a brief explanation.
+If tooSimilarToRecent is true, populate similarityNote explaining which recent article it overlaps with and why.`;
+
+  const user = `Evaluate this article for the author's professional feed.
 
 Title: ${article.title}
 Source: ${article.source}
@@ -118,9 +191,9 @@ Excerpt: ${article.summary || '(none)'}`;
 // ─── Step 2: Draft ────────────────────────────────────────────────────────────
 
 async function draft(article, evalData, config, guidance = null) {
-  const maxChars = config.pipeline?.linkedInPostMaxChars || 2800;
+  const maxChars = config.pipeline?.maxPostChars || config.pipeline?.linkedInPostMaxChars || 2800;
 
-  const system = `You are a ghostwriter for John, an Engineering Director at Indeed.
+  const system = `You are a writing assistant helping the author draft content in their voice.
 
 WRITING STYLE:
 ${skills.writingStyle}
@@ -132,23 +205,23 @@ POINTS OF VIEW:
 ${skills.pointsOfView}
 
 CRITICAL INSTRUCTION — READ BEFORE DRAFTING:
-The post must start from a Point of View, not from the article. Before writing
+The draft must start from a Point of View, not from the article. Before writing
 a single word, identify the opinion in the Points of View section that most
-closely matches the article's subject. That opinion is the post. The article
-is a news hook — a current, concrete example of something John already
-believes. Write as if John is reacting to the article through that lens.
+closely matches the article's subject. That opinion is the foundation. The article
+is a hook — a current, concrete example of something the author already believes.
+Write as if the author is reacting to the article through that lens.
 
 Do NOT open by describing what the article says. Do NOT open with what
 researchers found, what the study showed, or what the author argued. The
-first sentence should state John's opinion or name the problem he sees —
+first sentence should state the author's opinion or name the problem they see —
 not describe the article.
 
 A reader who has not seen the article should come away with a clear opinion,
 not a sense of what the article covered.
 
-Stay under ${maxChars} characters. Return ONLY the post text — no preamble, no explanation, no surrounding quotes.`;
+Stay under ${maxChars} characters. Return ONLY the draft text — no preamble, no explanation, no surrounding quotes.`;
 
-  const user = `Write a LinkedIn post for this article.
+  const user = `Write a draft for this article.
 
 Title: ${article.title}
 Source: ${article.source}
@@ -158,7 +231,7 @@ Excerpt: ${article.summary || '(none)'}
 Use these insights from the evaluation:
 - Key insight: ${evalData.keyInsight || ''}
 - Application hook: ${evalData.applicationHook || ''}
-- Primary connection to John's work: ${evalData.primaryConnection || ''}
+- Primary connection to the author's work: ${evalData.primaryConnection || ''}
 ${guidance ? `\nAuthor guidance for this draft: ${guidance}` : ''}`;
 
   try {
@@ -203,12 +276,12 @@ async function regenerateDraft(draftId, guidance, config) {
   return { post_text: postText };
 }
 
-// ─── Submit article by URL ────────────────────────────────────────────────────
+// ─── Fetch article content ────────────────────────────────────────────────────
 
 async function fetchArticleContent(url) {
   const { data } = await axios.get(url, {
     timeout: 15000,
-    headers: { 'User-Agent': 'LinkedInAutoPoster/1.0' },
+    headers: { 'User-Agent': 'Vantage/1.0' },
     maxContentLength: 2 * 1024 * 1024,
     responseType: 'text',
   });
@@ -222,24 +295,38 @@ async function fetchArticleContent(url) {
 
   const source = new URL(url).hostname.replace(/^www\./, '');
 
-  const summary = data
+  // Strip scripts and styles first
+  const cleaned = data
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 600);
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+  // Try to find a main content area to avoid nav/header/footer noise
+  const mainMatch = cleaned.match(/<(?:article|main)(?:\s[^>]*)?>( [\s\S]*?)<\/(?:article|main)>/i);
+  const contentArea = mainMatch ? mainMatch[1] : cleaned;
+
+  // Extract paragraph text — filters out short nav/button strings
+  const paragraphs = [];
+  const pPattern = /<p(?:\s[^>]*)?>( [\s\S]*?)<\/p>/gi;
+  let pMatch;
+  while ((pMatch = pPattern.exec(contentArea)) !== null) {
+    const text = pMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (text.length > 40) paragraphs.push(text);
+  }
+
+  const summary = paragraphs.length
+    ? paragraphs.join(' ').slice(0, 1500)
+    : cleaned.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1000);
 
   return { title, source, summary };
 }
 
-async function submitArticleUrl(url, config) {
-  console.log(`[pipeline] Manual article submission: ${url}`);
+// ─── Analyze article by URL (fetch + eval only, no draft) ────────────────────
 
-  // Validate URL
+async function analyzeArticleUrl(url) {
+  console.log(`[pipeline] Analyze URL: ${url}`);
+
   try { new URL(url); } catch { throw new Error('Invalid URL'); }
 
-  // Fetch content
   let articleContent;
   try {
     articleContent = await fetchArticleContent(url);
@@ -247,7 +334,6 @@ async function submitArticleUrl(url, config) {
     throw new Error(`Could not fetch URL: ${err.message}`);
   }
 
-  // Insert (or skip if duplicate)
   insertArticle({
     source:       articleContent.source,
     source_type:  'manual',
@@ -260,104 +346,73 @@ async function submitArticleUrl(url, config) {
   const article = getArticleByUrl(url);
   if (!article) throw new Error('Failed to store article');
 
-  // Evaluate
   const { rejectionContext, recencyContext } = buildEvalContext();
   const evalData = await evaluate(article, rejectionContext, recencyContext);
   if (!evalData) throw new Error('Evaluation failed');
 
   updateArticleEval(article.id, evalData.overallScore, evalData, 'evaluated');
-  console.log(`[pipeline] Manual eval score: ${evalData.overallScore}/10`);
-
-  // Always draft regardless of score — user chose this article intentionally
-  const postText = await draft(article, evalData, config);
-  if (!postText) throw new Error('Draft generation failed');
-
-  insertDraft({
-    article_id:        article.id,
-    post_text:         postText,
-    primary_connection: evalData.primaryConnection || null,
-    key_insight:        evalData.keyInsight        || null,
-    eval_score:         evalData.overallScore,
-  });
-
-  markArticleDrafted(article.id);
-  console.log(`[pipeline] Manual draft created for "${article.title}"`);
+  console.log(`[pipeline] Analyze score: ${evalData.overallScore}/10`);
 
   return {
-    score: evalData.overallScore,
-    title: article.title,
+    id:                 article.id,
+    title:              article.title,
+    score:              evalData.overallScore,
+    key_insight:        evalData.keyInsight        || null,
+    primary_connection: evalData.primaryConnection || null,
     ...(evalData.tooSimilarToRecent && { similarityWarning: evalData.similarityNote }),
   };
 }
 
-// ─── Main pipeline ────────────────────────────────────────────────────────────
+// ─── Evaluation loop (scores pending articles, no drafting) ──────────────────
 
-async function runPipeline(config, onProgress) {
-  const minScore    = config.pipeline?.minRelevanceScore || 7;
-  const maxDrafts   = config.pipeline?.maxDraftsPerRun   || 3;
+async function runEvaluation(config, onProgress) {
+  const minScore    = config.pipeline?.minRelevanceScore   || 7;
   const articleLimit = config.pipeline?.articlesPerCrawlRun || 50;
-  console.log('[pipeline] Starting...');
+  console.log('[pipeline] Evaluation starting...');
 
   const { rejectionContext, recencyContext } = buildEvalContext();
   if (rejectionContext) console.log('[pipeline] Injecting rejection context into eval');
   if (recencyContext)   console.log('[pipeline] Injecting recency context into eval');
 
   const articles = getPendingArticles(articleLimit);
-  console.log(`[pipeline] ${articles.length} pending articles`);
-  let created = 0;
+  console.log(`[pipeline] ${articles.length} pending articles to evaluate`);
+  let evaluated = 0;
+  let skipped   = 0;
 
   for (const article of articles) {
-    if (created >= maxDrafts) break;
-
     console.log(`[pipeline] Evaluating: "${article.title}"`);
-    onProgress?.({ msg: `Reviewing: "${article.title}"` });
+    onProgress?.({ msg: `Scoring: "${article.title}"` });
     const evalData = await evaluate(article, rejectionContext, recencyContext);
 
     if (!evalData) {
       updateArticleEval(article.id, 0, {}, 'skipped');
+      skipped++;
       continue;
     }
 
     if (evalData.tooSimilarToRecent) {
-      console.log(`[pipeline] Skip "${article.title}" — too similar to recent post: ${evalData.similarityNote}`);
+      console.log(`[pipeline] Skip "${article.title}" — too similar to recent post`);
       updateArticleEval(article.id, evalData.overallScore, evalData, 'skipped');
+      skipped++;
       continue;
     }
 
-    if (!evalData.pass || evalData.overallScore < minScore) {
-      console.log(`[pipeline] Skip "${article.title}" (${evalData.overallScore}): ${evalData.skipReason || 'below threshold'}`);
+    const relevanceScore = evalData.relevanceScore ?? evalData.overallScore;
+    if (!evalData.pass || relevanceScore < minScore) {
+      console.log(`[pipeline] Skip "${article.title}" (relevance: ${relevanceScore}, overall: ${evalData.overallScore}): ${evalData.skipReason || 'below threshold'}`);
       updateArticleEval(article.id, evalData.overallScore, evalData, 'skipped');
+      skipped++;
       continue;
     }
 
     updateArticleEval(article.id, evalData.overallScore, evalData, 'evaluated');
-    await new Promise(r => setTimeout(r, 1000));
-
-    console.log(`[pipeline] Drafting for "${article.title}" (score ${evalData.overallScore})`);
-    onProgress?.({ msg: `Drafting: "${article.title}"` });
-    const postText = await draft(article, evalData, config);
-
-    if (!postText) {
-      updateArticleEval(article.id, evalData.overallScore, evalData, 'skipped');
-      continue;
-    }
-
-    insertDraft({
-      article_id:         article.id,
-      post_text:          postText,
-      primary_connection: evalData.primaryConnection || null,
-      key_insight:        evalData.keyInsight        || null,
-      eval_score:         evalData.overallScore,
-    });
-
-    markArticleDrafted(article.id);
-    created++;
-    console.log(`[pipeline] Draft created for "${article.title}"`);
-    await new Promise(r => setTimeout(r, 2000));
+    evaluated++;
+    console.log(`[pipeline] Scored "${article.title}": ${evalData.overallScore}/10`);
+    await new Promise(r => setTimeout(r, 500));
   }
 
-  console.log(`[pipeline] Done. ${created} drafts created.`);
-  return { draftsCreated: created };
+  console.log(`[pipeline] Done. evaluated=${evaluated} skipped=${skipped}`);
+  return { evaluated, skipped };
 }
 
 function reloadSkills() {
@@ -376,35 +431,7 @@ function reloadSkills() {
   }
 }
 
-async function draftArticleById(id, config) {
-  const article = getArticleById(id);
-  if (!article) throw new Error('Article not found');
-  if (article.status === 'drafted') throw new Error('Article already has a draft');
-
-  console.log(`[pipeline] Manual draft by ID for "${article.title}"`);
-
-  const { rejectionContext, recencyContext } = buildEvalContext();
-  const evalData = await evaluate(article, rejectionContext, recencyContext);
-  if (!evalData) throw new Error('Evaluation failed');
-
-  updateArticleEval(article.id, evalData.overallScore, evalData, 'evaluated');
-
-  // Always draft — user explicitly requested it
-  const postText = await draft(article, evalData, config);
-  if (!postText) throw new Error('Draft generation failed');
-
-  insertDraft({
-    article_id:         article.id,
-    post_text:          postText,
-    primary_connection: evalData.primaryConnection || null,
-    key_insight:        evalData.keyInsight        || null,
-    eval_score:         evalData.overallScore,
-  });
-
-  markArticleDrafted(article.id);
-  console.log(`[pipeline] Draft created for "${article.title}" (score ${evalData.overallScore})`);
-
-  return { score: evalData.overallScore, title: article.title };
-}
-
-module.exports = { runPipeline, regenerateDraft, submitArticleUrl, draftArticleById, reloadSkills };
+module.exports = {
+  runEvaluation, regenerateDraft, reloadSkills,
+  evaluate, draft, buildEvalContext, analyzeArticleUrl,
+};

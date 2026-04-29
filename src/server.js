@@ -9,7 +9,7 @@ const crypto       = require('crypto');
 const db = require('./db');
 const { getAuthUrl, exchangeCode, getAuthStatus } = require('./linkedin');
 const scheduler = require('./scheduler');
-const { regenerateDraft, submitArticleUrl, draftArticleById, reloadSkills } = require('./pipeline');
+const { regenerateDraft, reloadSkills, evaluate, draft, buildEvalContext, analyzeArticleUrl } = require('./pipeline');
 const { checkSourceHealth } = require('./crawler');
 const { streamCalibration, appendPointOfView } = require('./calibrate');
 
@@ -96,6 +96,12 @@ app.get('/auth/linkedin/callback', requireLogin, async (req, res) => {
   } catch (err) {
     res.redirect(`/?error=${encodeURIComponent(err.message)}`);
   }
+});
+
+// ─── LinkedIn status ──────────────────────────────────────────────────────────
+
+app.get('/api/linkedin/status', requireLogin, (req, res) => {
+  res.json(getAuthStatus());
 });
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -203,11 +209,11 @@ app.post('/api/run/post', requireLogin, async (req, res) => {
   }
 });
 
-app.post('/api/run/article', requireLogin, async (req, res) => {
+app.post('/api/run/analyze', requireLogin, async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
   try {
-    const result = await submitArticleUrl(url, loadConfig());
+    const result = await analyzeArticleUrl(url);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -255,12 +261,13 @@ app.get('/api/articles', requireLogin, (req, res) => {
       draft_status:        a.draft_status || null,
       fetched_at:          a.fetched_at,
       eval_score:          a.eval_score,
-      key_insight:         evalData?.keyInsight || null,
+      key_insight:         evalData?.keyInsight        || null,
+      primary_connection:  evalData?.primaryConnection || null,
       eval_breakdown: evalData ? {
         relevance:     evalData.relevanceScore     ?? null,
         timeliness:    evalData.timelinessScore    ?? null,
         specificity:   evalData.specificityScore   ?? null,
-        postPotential: evalData.postPotentialScore ?? null,
+        feedValue:     evalData.feedValueScore      ?? evalData.postPotentialScore ?? null,
         skipReason:    evalData.skipReason         || null,
         similarityNote: evalData.similarityNote    || null,
       } : null,
@@ -272,18 +279,50 @@ app.get('/api/articles', requireLogin, (req, res) => {
   res.json(articles);
 });
 
-app.post('/api/articles/:id/draft', requireLogin, async (req, res) => {
+app.post('/api/articles/:id/ai-assist', requireLogin, async (req, res) => {
   try {
-    const result = await draftArticleById(Number(req.params.id), loadConfig());
-    res.json(result);
+    const article = db.getArticleById(Number(req.params.id));
+    if (!article) return res.status(404).json({ error: 'Article not found' });
+
+    let evalData = article.eval_data ? JSON.parse(article.eval_data) : null;
+    if (!evalData) {
+      const { rejectionContext, recencyContext } = buildEvalContext();
+      evalData = await evaluate(article, rejectionContext, recencyContext);
+      if (!evalData) return res.status(500).json({ error: 'Evaluation failed' });
+      db.updateArticleEval(article.id, evalData.overallScore, evalData, 'evaluated');
+    }
+
+    const postText = await draft(article, evalData, loadConfig(), req.body.guidance || null);
+    if (!postText) return res.status(500).json({ error: 'Draft generation failed' });
+
+    res.json({ post_text: postText, score: evalData.overallScore || article.eval_score });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
+});
+
+app.post('/api/drafts', requireLogin, (req, res) => {
+  const { article_id, post_text } = req.body;
+  if (!post_text?.trim()) return res.status(400).json({ error: 'post_text required' });
+  const result = db.insertDraft({
+    article_id:         article_id || null,
+    post_text:          post_text.trim(),
+    primary_connection: null,
+    key_insight:        null,
+    eval_score:         null,
+  });
+  if (article_id) db.markArticleDrafted(article_id);
+  res.json({ ok: true, draftId: result.lastInsertRowid });
 });
 
 app.post('/api/articles/:id/star', requireLogin, (req, res) => {
   const result = db.toggleArticleStar(Number(req.params.id));
   res.json({ starred: !!result.starred });
+});
+
+app.delete('/api/articles/:id', requireLogin, (req, res) => {
+  db.deleteArticle(Number(req.params.id));
+  res.json({ ok: true });
 });
 
 // ─── Skills / Calibrate ───────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { runCrawl, checkSourceHealth } = require('./crawler');
-const { runPipeline }    = require('./pipeline');
+const { runEvaluation } = require('./pipeline');
 const { postToLinkedIn, getAuthStatus, fetchPostAnalytics } = require('./linkedin');
 const { getNextApprovedPost, markDraftPosted, insertPost,
         getPostsPendingAnalytics, updatePostAnalytics, setSetting, pruneArticles } = require('./db');
@@ -113,11 +113,11 @@ async function runCrawlAndPipeline(onProgress) {
 
     onProgress?.({ msg: 'Crawling sources...' });
     const crawlResult = await runCrawl(config);
-    onProgress?.({ msg: `Found ${crawlResult.inserted} new articles. Starting pipeline...` });
+    onProgress?.({ msg: `Found ${crawlResult.inserted} new articles. Scoring...` });
 
-    const pipelineResult = await runPipeline(config, onProgress);
-    console.log('[scheduler] Complete:', { crawlResult, pipelineResult });
-    return { crawlResult, pipelineResult };
+    const evalResult = await runEvaluation(config, onProgress);
+    console.log('[scheduler] Complete:', { crawlResult, evalResult });
+    return { crawlResult, evalResult };
   } catch (err) {
     console.error('[scheduler] Error:', err.message);
     throw err;

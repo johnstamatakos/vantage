@@ -98,6 +98,13 @@ function getArticleById(id) {
   return db.prepare(`SELECT * FROM articles WHERE id = ?`).get(id);
 }
 
+function deleteArticle(id) {
+  return db.transaction(() => {
+    db.prepare(`DELETE FROM drafts WHERE article_id = ?`).run(id);
+    return db.prepare(`DELETE FROM articles WHERE id = ?`).run(id);
+  })();
+}
+
 function getAllArticles() {
   return db.prepare(`
     SELECT a.*,
@@ -124,6 +131,12 @@ function pruneArticles() {
     const skippedResult = db.prepare(`
       DELETE FROM articles
       WHERE status = 'skipped' AND starred = 0 AND fetched_at < datetime('now', '-3 days')
+    `).run();
+
+    // Evaluated articles older than 30 days that were never drafted (not starred)
+    const evaluatedResult = db.prepare(`
+      DELETE FROM articles
+      WHERE status = 'evaluated' AND starred = 0 AND fetched_at < datetime('now', '-30 days')
     `).run();
 
     // Articles whose latest draft is rejected, with no active draft, not starred
@@ -165,6 +178,7 @@ function pruneArticles() {
     return {
       pending:        pendingResult.changes,
       skipped:        skippedResult.changes,
+      evaluated:      evaluatedResult.changes,
       rejected:       toDelete.length,
       expiredDrafted: expiredDrafted.length,
       staleDrafts:    staleDraftsResult.changes,
@@ -369,7 +383,7 @@ function getStats() {
 
 module.exports = {
   insertArticle, getPendingArticles, updateArticleEval, markArticleDrafted, getArticleByUrl,
-  getArticleById, getAllArticles, toggleArticleStar, pruneArticles,
+  getArticleById, getAllArticles, toggleArticleStar, deleteArticle, pruneArticles,
   insertDraft, getDraftsByStatus, getApprovedQueue, getDraftById,
   approveDraft, rejectDraft, getRecentRejectionNotes, getRecentPostTitles, updateDraftText, reorderQueue,
   getNextApprovedPost, markDraftPosted,

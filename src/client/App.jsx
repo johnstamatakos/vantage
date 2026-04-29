@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import Sidebar from './components/Sidebar'
 import Toast from './components/Toast'
 import Dashboard from './pages/Dashboard'
-import ReviewDrafts from './pages/ReviewDrafts'
-import PostQueue from './pages/PostQueue'
+import Sharing from './pages/Sharing'
 import Settings from './pages/Settings'
 import Calibrate from './pages/Calibrate'
 const Analytics = lazy(() => import('./pages/Analytics'))
@@ -12,7 +11,6 @@ import { api } from './utils/api'
 export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [pendingCount, setPendingCount] = useState(0)
-  const [queueCount, setQueueCount] = useState(0)
   const [toast, setToast] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -31,7 +29,6 @@ export default function App() {
     try {
       const { stats } = await api('/api/dashboard')
       setPendingCount(stats.draftsPendingReview)
-      setQueueCount(stats.draftsApproved)
     } catch {}
   }, [])
 
@@ -48,18 +45,14 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={navigate}
         pendingCount={pendingCount}
-        queueCount={queueCount}
         isOpen={sidebarOpen}
       />
       <main className="main">
         {currentPage === 'dashboard' && (
           <Dashboard onNavigate={navigate} showToast={showToast} updateBadges={updateBadges} />
         )}
-        {currentPage === 'review' && (
-          <ReviewDrafts showToast={showToast} updateBadges={updateBadges} />
-        )}
-        {currentPage === 'queue' && (
-          <PostQueue showToast={showToast} />
+        {currentPage === 'sharing' && (
+          <Sharing showToast={showToast} updateBadges={updateBadges} />
         )}
         {currentPage === 'analytics' && (
           <Suspense fallback={<div className="empty"><div className="icon">⏳</div>Loading...</div>}>

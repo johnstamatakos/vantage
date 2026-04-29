@@ -1,13 +1,13 @@
 # Points of View
 
-These are [YOUR NAME]'s actual opinions on the topics you post about. When drafting
-a post, find the opinion that most closely matches the article's subject and use
-it as the angle. The post should feel like [YOUR NAME] reacting to the article
-through one of these lenses, not summarizing the article with a name attached.
+These are [YOUR NAME]'s actual opinions on topics they follow closely. Use them
+to evaluate whether an article is worth surfacing in their feed — an article
+that directly supports, challenges, complicates, or provides new evidence for
+any of these views is relevant, regardless of whether the article agrees with them.
 
-The more specific and debatable these are, the better the drafts will be.
-Vague beliefs produce generic posts. Sharp, debatable convictions produce
-posts worth reading.
+The more specific and debatable these are, the better the curation will be.
+Vague beliefs produce weak signal. Sharp, debatable convictions help the app
+distinguish genuinely relevant articles from adjacent noise.
 
 ---
 
@@ -45,15 +45,7 @@ posts worth reading.
   Engineers see too far out. Product managers see too close in. Both
   perspectives are necessary and neither is sufficient on its own."]
 
-**[Topic area, e.g. "System Design and Reliability"]**
-- [Example: "Async systems are powerful but not the right tool for every
-  problem. Teams reach for them by default and pay for it in debugging
-  complexity when synchronous design would have been simpler and sufficient."]
-- [Example: "The dissolution of QA teams has created a quality debt that's
-  showing up in products everywhere. Shifting left doesn't mean eliminating
-  the function — it means distributing ownership more carefully."]
-
-**[Add as many topic areas as are relevant to what you post about]**
+**[Add as many topic areas as are relevant to what you follow closely]**
 
 ---
 
@@ -62,10 +54,12 @@ Tips for writing good Points of View:
 - **State the opinion, not the topic.** "AI agents are often misused" is a topic.
   "Multi-agent workflows are being reached for before single-agent approaches
   are exhausted" is a conviction.
-- **Make them debatable.** If no one could reasonably disagree, it's not an
-  opinion worth posting about.
+- **Make them debatable.** If no one could reasonably disagree, it's not a
+  view worth curating around.
+- **Include views you hold but aren't certain about.** Articles that challenge
+  or complicate a belief are just as worth reading as ones that confirm it.
 - **Ground them in experience.** The best ones come from something you've seen
   fail, something you've had to defend, or something you believe that most of
   your peers don't yet.
-- **Be specific.** Vague beliefs produce generic posts. The more precisely you
-  can state what you think and why, the better the drafts will be.
+- **Be specific.** Vague beliefs produce weak curation signal. The more
+  precisely you can state what you think and why, the better the feed will be.

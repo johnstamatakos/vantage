@@ -21,7 +21,7 @@ const BREAKDOWN_ROWS = [
   { key: 'relevance',     label: 'Relevance',      weight: '50%' },
   { key: 'timeliness',    label: 'Timeliness',     weight: '20%' },
   { key: 'specificity',   label: 'Specificity',    weight: '15%' },
-  { key: 'postPotential', label: 'Post potential', weight: '15%' },
+  { key: 'feedValue',     label: 'Feed value',     weight: '15%' },
 ]
 
 const COLUMNS = [
@@ -33,17 +33,17 @@ const COLUMNS = [
 ]
 
 const STATUS_OPTIONS = [
-  { value: '',               label: 'All statuses' },
-  { value: 'pending',        label: 'Pending' },
-  { value: 'evaluated',      label: 'Evaluated' },
-  { value: 'pending_review', label: 'Awaiting review' },
-  { value: 'approved',       label: 'Approved' },
-  { value: 'posted',         label: 'Posted' },
-  { value: 'rejected',       label: 'Rejected' },
-  { value: 'skipped',        label: 'Skipped' },
+  { value: '',               label: 'All' },
+  { value: 'pending',        label: 'Pending scoring' },
+  { value: 'evaluated',      label: 'Scored' },
+  { value: 'skipped',        label: 'Low score' },
+  { value: 'drafted',        label: 'Draft saved' },
+  { value: 'pending_review', label: 'Draft — awaiting queue' },
+  { value: 'approved',       label: 'Draft — queued' },
+  { value: 'posted',         label: 'Published' },
 ]
 
-const FILTER_DEFAULTS = { source: '', scoreMin: 0, scoreMax: 10, since: '', status: '' }
+const FILTER_DEFAULTS = { source: '', scoreMin: 0, scoreMax: 10, since: '', status: '', starred: false }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -215,23 +215,22 @@ function StarButton({ starred, onClick }) {
   )
 }
 
-function DraftButton({ articleId, drafting, onDraft }) {
+function DraftButton({ article, onDraft }) {
   return (
-    <button onClick={() => onDraft(articleId)} disabled={drafting === articleId}
-      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 99, cursor: 'pointer', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', opacity: drafting === articleId ? 0.5 : 1, flexShrink: 0 }}>
-      {drafting === articleId ? 'Drafting…' : 'Draft'}
+    <button onClick={() => onDraft(article)}
+      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 99, cursor: 'pointer', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', flexShrink: 0 }}>
+      Draft
     </button>
   )
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
+export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
   const [articles, setArticles] = useState(null)
   const [sortKey, setSortKey]   = useState('fetched_at')
   const [sortDir, setSortDir]   = useState('desc')
   const [filters, setFilters]   = useState(FILTER_DEFAULTS)
-  const [drafting, setDrafting] = useState(null)
 
   const sources = useMemo(
     () => articles ? [...new Set(articles.map(a => a.source).filter(Boolean))].sort() : [],
@@ -245,20 +244,10 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
     setArticles(prev => prev.map(a => a.id === id ? { ...a, starred } : a))
   }
 
-  async function draftArticle(id) {
-    setDrafting(id)
-    try {
-      const result = await api(`/api/articles/${id}/draft`, 'POST')
-      const draftExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-      setArticles(prev => prev.map(a => a.id === id
-        ? { ...a, status: 'drafted', draft_status: 'pending_review', eval_score: result.score, expires_at: draftExpiry, queued_for_deletion: false }
-        : a
-      ))
-      updateBadges()
-    } catch (err) {
-      alert(err.message)
-    }
-    setDrafting(null)
+  async function deleteArticle(id) {
+    if (!confirm('Delete this article?')) return
+    await api(`/api/articles/${id}`, 'DELETE')
+    setArticles(prev => prev.filter(a => a.id !== id))
   }
 
   function handleSort(key) {
@@ -283,9 +272,10 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
   )
 
   const scoreFiltered = filters.scoreMin > 0 || filters.scoreMax < 10
-  const isFiltered = filters.source !== '' || scoreFiltered || filters.since !== '' || filters.status !== ''
+  const isFiltered = filters.source !== '' || scoreFiltered || filters.since !== '' || filters.status !== '' || filters.starred
 
   const filtered = articles.filter(a => {
+    if (filters.starred && !a.starred) return false
     if (filters.source && a.source !== filters.source) return false
     if (scoreFiltered) {
       if (a.eval_score == null || a.eval_score < filters.scoreMin || a.eval_score > filters.scoreMax) return false
@@ -315,6 +305,21 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
           </svg>
         </div>
+
+        {/* Starred toggle */}
+        <button
+          onClick={() => setFilter('starred', !filters.starred)}
+          title={filters.starred ? 'Showing starred only' : 'Show starred only'}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
+            fontSize: 15, lineHeight: 1, color: filters.starred ? '#f59e0b' : 'var(--muted)',
+            opacity: filters.starred ? 1 : 0.5, transition: 'opacity 0.15s, color 0.15s', flexShrink: 0,
+          }}
+          onMouseOver={e => { e.currentTarget.style.opacity = 1 }}
+          onMouseOut={e => { if (!filters.starred) e.currentTarget.style.opacity = 0.5 }}
+        >
+          ★
+        </button>
 
         {/* Source */}
         <div className="filter-seg filter-seg-src">
@@ -401,7 +406,7 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
                     <td style={{ padding: '10px 0 10px 12px', verticalAlign: 'middle' }}>
                       <StarButton starred={a.starred} onClick={() => toggleStar(a.id)} />
                     </td>
-                    <td style={{ padding: '10px 6px', maxWidth: 280, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                    <td style={{ padding: '10px 6px', width: '50%', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       <a href={a.url} target="_blank" rel="noopener noreferrer"
                         style={{ color: 'var(--text)', textDecoration: 'none', lineHeight: 1.4, display: 'block' }}
                         onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
@@ -412,10 +417,10 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                         <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>
                         <ExpirationPill article={a} />
-                        {a.status !== 'drafted' && (
-                          <button onClick={() => draftArticle(a.id)} disabled={drafting === a.id}
-                            style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', opacity: drafting === a.id ? 0.5 : 1 }}>
-                            {drafting === a.id ? 'Drafting…' : 'Draft'}
+                        {a.status !== 'drafted' && onDraft && (
+                          <button onClick={() => onDraft(a)}
+                            style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)' }}>
+                            Draft
                           </button>
                         )}
                       </div>
@@ -431,9 +436,20 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
                       <ScoreCell score={a.eval_score} breakdown={a.eval_breakdown} />
                     </td>
                     <td style={{ padding: '10px 14px' }}>
-                      <div style={{ color: 'var(--muted)', maxWidth: 320, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                      <div style={{ color: 'var(--muted)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                         {a.key_insight || <span style={{ opacity: 0.4 }}>—</span>}
                       </div>
+                    </td>
+                    <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}>
+                      <button
+                        onClick={() => deleteArticle(a.id)}
+                        title="Delete article"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--muted)', opacity: 0.4, fontSize: 14, lineHeight: 1, transition: 'opacity 0.15s, color 0.15s' }}
+                        onMouseOver={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = 'var(--red)' }}
+                        onMouseOut={e => { e.currentTarget.style.opacity = 0.4; e.currentTarget.style.color = 'var(--muted)' }}
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 )
@@ -480,12 +496,21 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0 }) {
 
               {/* Footer */}
               <div className="article-card-footer">
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                   <ExpirationPill article={a} />
                 </div>
-                {a.status !== 'drafted' && (
-                  <DraftButton articleId={a.id} drafting={drafting} onDraft={draftArticle} />
-                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {a.status !== 'drafted' && onDraft && (
+                    <DraftButton article={a} onDraft={onDraft} />
+                  )}
+                  <button
+                    onClick={() => deleteArticle(a.id)}
+                    title="Delete article"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--muted)', opacity: 0.5, fontSize: 14, lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             </div>
           )

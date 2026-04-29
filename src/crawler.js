@@ -131,7 +131,7 @@ async function crawlRSS(config) {
           url: item.link,
           title: item.title.trim(),
           summary: (item.contentSnippet || item.content || item.summary || '')
-            .replace(/<[^>]+>/g, '').slice(0, 500),
+            .replace(/<[^>]+>/g, '').slice(0, 1000),
           published_at: item.isoDate || null,
         });
       }

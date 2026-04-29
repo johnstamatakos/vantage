@@ -1,70 +1,14 @@
 import { useState, useEffect } from 'react'
-import { api } from '../utils/api'
+import { api, parseCron } from '../utils/api'
 import ArticleFeed from '../components/ArticleFeed'
+import DraftWritingModal from '../components/DraftWritingModal'
+import AnalyzeModal from '../components/AnalyzeModal'
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-function parseCron(cron) {
-  if (!cron) return '—'
-  const [min, hour, , , weekday] = cron.split(' ')
-  const h = parseInt(hour), m = parseInt(min)
-  const time = `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
-  const days = weekday === '*'
-    ? 'every day'
-    : weekday.split(',').map(d => DAYS[parseInt(d)]).join(', ')
-  return `${days} at ${time}`
-}
-
-function DraftModal({ onClose, onSuccess }) {
-  const [url, setUrl] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  async function submit() {
-    if (!url.trim()) return
-    setSubmitting(true)
-    try {
-      const r = await api('/api/run/article', 'POST', { url: url.trim() })
-      onSuccess(`Draft created for "${r.title}" (score: ${r.score}/10)`)
-      onClose()
-    } catch (err) {
-      alert(`Failed: ${err.message}`)
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="card" style={{ width: 'min(480px, calc(100vw - 32px))', padding: 24 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6 }}>Draft from URL</div>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-          Paste any article URL to generate a draft immediately, bypassing the crawl.
-        </div>
-        <input
-          className="cfg-input"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !submitting && submit()}
-          placeholder="https://..."
-          autoFocus
-          disabled={submitting}
-          style={{ width: '100%', boxSizing: 'border-box', marginBottom: 14 }}
-        />
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button className="btn btn-primary" onClick={submit} disabled={submitting || !url.trim()}>
-            {submitting ? 'Drafting...' : 'Draft It'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function Dashboard({ showToast, updateBadges }) {
+export default function Dashboard({ showToast, updateBadges, onNavigate }) {
   const [data, setData] = useState(null)
   const [crawling, setCrawling] = useState(false)
-  const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false)
+  const [draftingArticle, setDraftingArticle] = useState(null)
   const [feedRefreshKey, setFeedRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -93,8 +37,9 @@ export default function Dashboard({ showToast, updateBadges }) {
           try {
             const data = JSON.parse(line.slice(6))
             if (data.done) {
-              const n = data.pipelineResult?.draftsCreated || 0
-              showToast(`Done! ${n} draft${n !== 1 ? 's' : ''} created.`)
+              const n = data.crawlResult?.inserted || 0
+              const e = data.evalResult?.evaluated  || 0
+              showToast(`Done! ${n} new article${n !== 1 ? 's' : ''} · ${e} scored`)
               updateBadges()
               setFeedRefreshKey(k => k + 1)
               break outer
@@ -110,17 +55,10 @@ export default function Dashboard({ showToast, updateBadges }) {
     setCrawling(false)
   }
 
-  async function postNow() {
-    if (!confirm('Post the next approved item to LinkedIn right now?')) return
-    const r = await api('/api/run/post', 'POST')
-    if (r.skipped)     showToast(`Skipped: ${r.reason}`, 'error')
-    else if (r.posted) { showToast('Posted!', 'success'); api('/api/dashboard').then(setData) }
-    else               showToast(`Failed: ${r.error}`, 'error')
-  }
 
-  function onDraftSuccess(msg) {
-    showToast(msg, 'success')
-    updateBadges()
+  function onAnalyzeSuccess({ title, score }) {
+    showToast(`Analyzed "${title}" (score: ${score}/10) — view in feed`)
+    setFeedRefreshKey(k => k + 1)
   }
 
   if (!data) {
@@ -132,7 +70,7 @@ export default function Dashboard({ showToast, updateBadges }) {
     )
   }
 
-  const { stats, linkedInStatus: li, config, sourceHealth } = data
+  const { stats, config, sourceHealth } = data
 
   const brokenSources = sourceHealth ? [
     sourceHealth.hackernews && !sourceHealth.hackernews.ok ? `HN (${sourceHealth.hackernews.error})` : null,
@@ -147,32 +85,11 @@ export default function Dashboard({ showToast, updateBadges }) {
         <button className="btn btn-ghost" onClick={runCrawl} disabled={crawling}>
           {crawling ? 'Crawling...' : 'Run Crawl'}
         </button>
-        <button className="btn btn-warn" onClick={postNow}>Post Now</button>
-        <button className="btn btn-primary" onClick={() => setDraftModalOpen(true)}>Draft</button>
+<button className="btn btn-primary" onClick={() => setAnalyzeModalOpen(true)}>Analyze</button>
       </div>
 
       {/* Consolidated info card */}
       <div className="card dash-info-grid" style={{ marginBottom: brokenSources.length > 0 ? 8 : 16 }}>
-        {/* LinkedIn */}
-        <div className="dash-info-col">
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 8 }}>LinkedIn</div>
-          {li.connected ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <span className="dot dot-green" />Connected
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>token valid for {li.expiresIn}m</div>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <span className="dot dot-red" />Not connected
-              </div>
-              <a href="/auth/linkedin" style={{ fontSize: 11, color: 'var(--accent)', display: 'block', marginTop: 3 }}>Connect now →</a>
-            </>
-          )}
-        </div>
-
         {/* Schedule */}
         <div className="dash-info-col">
           <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 8 }}>Schedule</div>
@@ -214,13 +131,28 @@ export default function Dashboard({ showToast, updateBadges }) {
       )}
 
       {/* Article feed */}
-      <ArticleFeed updateBadges={updateBadges} showToast={showToast} refreshKey={feedRefreshKey} />
+      <ArticleFeed updateBadges={updateBadges} refreshKey={feedRefreshKey} onDraft={setDraftingArticle} />
 
-      {/* Draft modal */}
-      {draftModalOpen && (
-        <DraftModal
-          onClose={() => setDraftModalOpen(false)}
-          onSuccess={onDraftSuccess}
+      {/* Analyze modal */}
+      {analyzeModalOpen && (
+        <AnalyzeModal
+          onClose={() => setAnalyzeModalOpen(false)}
+          onSuccess={onAnalyzeSuccess}
+        />
+      )}
+
+      {/* Draft writing modal */}
+      {draftingArticle && (
+        <DraftWritingModal
+          articleId={draftingArticle.id}
+          article={draftingArticle}
+          onClose={() => setDraftingArticle(null)}
+          onSaved={() => {
+            setDraftingArticle(null)
+            updateBadges()
+            onNavigate('sharing')
+          }}
+          showToast={showToast}
         />
       )}
     </>
