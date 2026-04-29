@@ -419,6 +419,7 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
                         <ExpirationPill article={a} />
                         {a.status !== 'drafted' && onDraft && (
                           <button onClick={() => onDraft(a)}
+                            title="Open the draft editor to write a post about this article"
                             style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99, cursor: 'pointer', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)' }}>
                             Draft
                           </button>
@@ -443,7 +444,7 @@ export default function ArticleFeed({ updateBadges, refreshKey = 0, onDraft }) {
                     <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}>
                       <button
                         onClick={() => deleteArticle(a.id)}
-                        title="Delete article"
+                        title="Remove this article from your feed"
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--muted)', opacity: 0.4, fontSize: 14, lineHeight: 1, transition: 'opacity 0.15s, color 0.15s' }}
                         onMouseOver={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = 'var(--red)' }}
                         onMouseOut={e => { e.currentTarget.style.opacity = 0.4; e.currentTarget.style.color = 'var(--muted)' }}

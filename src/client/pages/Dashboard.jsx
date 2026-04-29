@@ -82,10 +82,14 @@ export default function Dashboard({ showToast, updateBadges, onNavigate }) {
     <>
       {/* Action row */}
       <div className="btn-row dash-action-row" style={{ marginBottom: 16, justifyContent: 'flex-end' }}>
-        <button className="btn btn-ghost" onClick={runCrawl} disabled={crawling}>
+        <button className="btn btn-ghost" onClick={runCrawl} disabled={crawling}
+          title="Fetch new articles from all enabled sources and score them against your skills">
           {crawling ? 'Crawling...' : 'Run Crawl'}
         </button>
-<button className="btn btn-primary" onClick={() => setAnalyzeModalOpen(true)}>Analyze</button>
+        <button className="btn btn-primary" onClick={() => setAnalyzeModalOpen(true)}
+          title="Paste any article URL to fetch, score, and add it directly to your feed">
+          Analyze
+        </button>
       </div>
 
       {/* Consolidated info card */}

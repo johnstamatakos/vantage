@@ -157,7 +157,8 @@ export default function Sharing({ showToast, updateBadges }) {
       <div className="sharing-section-header" style={{ marginTop: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Queue
         {queue.length > 0 && (
-          <button className="btn btn-warn" style={{ fontSize: 12, padding: '4px 12px' }} onClick={postNow}>
+          <button className="btn btn-warn" style={{ fontSize: 12, padding: '4px 12px' }} onClick={postNow}
+            title="Publish the next queued post to LinkedIn right now, outside your schedule">
             Post Now
           </button>
         )}

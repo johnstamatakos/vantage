@@ -90,13 +90,13 @@ export default function DraftCard({ draft, onQueue, onDelete }) {
               className="btn btn-ai"
               onClick={handleAiAssist}
               disabled={aiLoading || !draft.article_id}
-              title="Generate a new draft using your writing style"
+              title="Generate a new draft using your writing style, job context, and points of view"
             >
               {aiLoading ? 'Generating...' : showGuidance ? '✦ Generate' : '✦ AI Assist'}
             </button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary" onClick={saveEdit} disabled={aiLoading}>Save</button>
-              <button className="btn btn-ghost" onClick={cancelEdit} disabled={aiLoading}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEdit} disabled={aiLoading} title="Save changes to this draft">Save</button>
+              <button className="btn btn-ghost" onClick={cancelEdit} disabled={aiLoading} title="Discard changes">Cancel</button>
             </div>
           </div>
         </>
@@ -104,9 +104,9 @@ export default function DraftCard({ draft, onQueue, onDelete }) {
 
       {!editing && (
         <div className="btn-row">
-          <button className="btn btn-success" onClick={() => onQueue(draft.id)}>Add to Queue</button>
-          <button className="btn btn-danger" onClick={() => onDelete(draft)}>Delete</button>
-          <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit</button>
+          <button className="btn btn-success" onClick={() => onQueue(draft.id)} title="Approve this draft and move it to the publishing queue">Add to Queue</button>
+          <button className="btn btn-danger" onClick={() => onDelete(draft)} title="Delete this draft permanently">Delete</button>
+          <button className="btn btn-ghost" onClick={() => setEditing(true)} title="Edit the draft text">Edit</button>
         </div>
       )}
     </div>
