@@ -104,7 +104,6 @@ export default function Settings({ showToast }) {
   const [analyticsCron, setAnalyticsCron] = useState('')
   const [timezone, setTimezone] = useState('')
   const [minScore, setMinScore] = useState(7)
-  const [maxDrafts, setMaxDrafts] = useState(3)
   const [sourceHealth, setSourceHealth] = useState(null)
   const [checkingHealth, setCheckingHealth] = useState(false)
 
@@ -120,7 +119,6 @@ export default function Settings({ showToast }) {
       setAnalyticsCron(cfg.schedule?.analyticsCron || '0 10 * * *')
       setTimezone(cfg.schedule?.timezone || 'America/New_York')
       setMinScore(cfg.pipeline?.minRelevanceScore ?? 7)
-      setMaxDrafts(cfg.pipeline?.maxDraftsPerRun ?? 3)
     })
   }, [])
 
@@ -153,7 +151,7 @@ export default function Settings({ showToast }) {
         rss:        { ...config.sources.rss,         feeds },
       },
       schedule: { ...config.schedule, crawlCron, postCron, analyticsCron, timezone },
-      pipeline: { ...config.pipeline, minRelevanceScore: Number(minScore), maxDraftsPerRun: Number(maxDrafts) },
+      pipeline: { ...config.pipeline, minRelevanceScore: Number(minScore) },
     }
     await api('/api/config', 'PUT', updated)
     setConfig(updated)
@@ -240,10 +238,6 @@ export default function Settings({ showToast }) {
           <div>
             <label className="cfg-lbl">Min Relevance Score (1–10)</label>
             <input type="number" min="1" max="10" className="cfg-input" value={minScore} onChange={e => setMinScore(e.target.value)} />
-          </div>
-          <div>
-            <label className="cfg-lbl">Max Drafts Per Crawl Run</label>
-            <input type="number" min="1" max="10" className="cfg-input" value={maxDrafts} onChange={e => setMaxDrafts(e.target.value)} />
           </div>
         </div>
       </div>
